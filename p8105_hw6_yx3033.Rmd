@@ -1,0 +1,24 @@
+---
+title: "p8105_hw6_yx3033"
+output: github_document
+---
+
+## Problem 1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
