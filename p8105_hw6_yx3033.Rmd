@@ -2,13 +2,101 @@
 title: "p8105_hw6_yx3033"
 output: github_document
 ---
+```{r, message=FALSE}
+library(tidyverse)
+```
+
 
 ## Problem 1
+```{r}
+homi_raw = read_csv("hw6_data/homicide-data.csv")
+```
+
+```{r}
+homicide_df =
+  homi_raw |>
+  mutate(
+    city_state = paste(city, state, sep = ", "),
+    #solved = 1
+    solve_binary = if_else(disposition == "Closed by arrest", 1, 0)
+  ) |>
+  filter(
+    !city_state %in% c("Dallas, TX", "Phoenix, AZ", 
+                       "Kansas City, MO", "Tulsa, AL")
+  ) |>
+  filter(
+    victim_race %in% c("White", "Black")  
+  ) |>
+  mutate(
+    victim_age = as.numeric(victim_age)
+  )
+
+```
 
 
+```{r}
+baltimore_df = 
+  homicide_df |> 
+  filter(city_state == "Baltimore, MD")
+
+glm_md = glm(
+  solve_binary ~ victim_age + victim_sex + victim_race,
+  data = baltimore_df,
+  family = binomial()
+)
+
+glm_md_tidy =
+  glm_md |> 
+  broom::tidy(conf.int = TRUE, exponentiate = TRUE)
+
+male_or =
+  glm_md_tidy |> 
+  filter(term == "victim_sexMale") |> 
+  select(term, estimate, conf.low, conf.high)
+
+male_or
+```
+After adjusting for victim age and race, homicides involving male victims had significantly lower odds of being solved compared to those involving female victims (adjusted OR = 0.426, 95% CI: 0.324–0.558).
 
 
+```{r}
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(broom)
+```
 
+```{r}
+city_results =
+  homicide_df |> 
+  group_by(city_state) |> 
+  nest() |> 
+  mutate(
+    # fit glm for each city
+    model = map(data, ~ glm(
+      solve_binary ~ victim_age + victim_sex + victim_race,
+      data = .x,
+      family = binomial()
+    )),
+    
+    # tidy model results with OR and CI
+    tidied = map(model, ~ tidy(
+      .x,
+      conf.int = TRUE,
+      exponentiate = TRUE
+    ))
+  ) |>
+  unnest(tidied) |> 
+  filter(term == "victim_sexMale") |> 
+  select(
+    city_state,
+    estimate,
+    conf.low,
+    conf.high
+  )
+```
+
+Now run glm for each of the cities in your dataset, and extract the adjusted odds ratio (and CI) for solving homicides comparing male victims to female victims. Do this within a “tidy” pipeline, making use of purrr::map, list columns, and unnest as necessary to create a dataframe with estimated ORs and CIs for each city.
 
 
 
