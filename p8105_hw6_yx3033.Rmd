@@ -96,7 +96,27 @@ city_results =
   )
 ```
 
-Now run glm for each of the cities in your dataset, and extract the adjusted odds ratio (and CI) for solving homicides comparing male victims to female victims. Do this within a “tidy” pipeline, making use of purrr::map, list columns, and unnest as necessary to create a dataframe with estimated ORs and CIs for each city.
+```{r}
+library(ggplot2)
+```
+
+
+```{r}
+city_results_plot =
+  ggplot(city_results, 
+       aes(x = estimate, y = reorder(city_state, estimate))) +
+  geom_point() +
+  geom_errorbarh(aes(xmin = conf.low, xmax = conf.high), height = 0.2) +
+  geom_vline(xintercept = 1, linetype = "dashed") +
+  labs(
+    x = "Adjusted Odds Ratio (Male vs Female Victims)",
+    y = "City",
+    title = "Adjusted OR by City"
+  ) +
+  theme_minimal()
+
+city_results_plot
+```
 
 
 
