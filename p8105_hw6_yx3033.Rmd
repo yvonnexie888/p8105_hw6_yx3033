@@ -198,8 +198,142 @@ boot_results |>
 ```
 
 
+## Problem 3
+```{r, message=FALSE}
+library(tidyverse)
+library(modelr)
+library(purrr)
+library(broom)
+library(ggplot2)
+```
+
+```{r}
+bth_weight = read_csv("hw6_data/birthweight.csv")
+```
+
+check nas
+
+```{r}
+sum(is.na(bth_weight))
+colSums(is.na(bth_weight))
+```
+
+```{r}
+bth_clean =
+  bth_weight |> 
+  mutate(
+    babysex = factor(babysex, levels = c(1,2),
+                     labels = c("male", "female")),
+    frace = factor(frace, levels = c(1,2,3,4,8,9),
+                   labels = c("White", "Black", "Asian", "Puerto_Rican", "Other", "Unknown")),
+    mrace = factor(mrace, levels = c(1, 2, 3, 4, 8),
+                   labels = c("White", "Black", "Asian", "Puerto_Rican", "Other")),
+    malform = factor(malform, levels = c(0, 1),
+                     labels = c("absent", "present")),
+  )
+```
+
+Modeling decisions:
+Birthweight (bwt) is continuous so I'm using linear regression (lm) model. I am including all biologically meaningful predictors: gestational age (gaweeks), length (blength), head circumference (bhead), baby sex, maternal smoking (smoken), maternal weight gain (wtgain), pre-pregnancy BMI (ppbmi), parity, malformations, and maternal age (momage). 
+
+```{r}
+proposed_formula = bwt ~ bhead + blength + gaweeks + babysex + smoken + wtgain + ppbmi + parity + malform + momage
+
+proposed_model = lm(proposed_formula, data = bth_clean)
+summary(proposed_model)
+```
 
 
 
+```{r}
+bth_preds =
+  bth_clean |> 
+  add_predictions(proposed_model, var = "pred") |> 
+  add_residuals(proposed_model, var = "resid")
+```
+```{r}
+ggplot(bth_preds, aes(x = pred, y=resid))+
+  geom_point(alpha = 0.5)+
+  geom_smooth(se = FALSE)+
+  labs(
+    x = "Fitted values (predicted birthweight)",
+    y= "Residuals",
+    title = "Residuals vs Fitted values for Linear Regression Model"
+  )+
+  theme_minimal()
+```
 
+
+```{r}
+md1 = bwt ~ blength + gaweeks
+md2 = bwt ~ bhead * blength * babysex
+```
+```{r}
+cv_df = crossv_mc(bth_clean, n = 50, test = 0.2) |> 
+  mutate(
+    train = map(train, as_tibble),
+    test  = map(test, as_tibble)
+  )
+```
+
+```{r}
+cv_df = cv_df |> 
+  mutate(
+    mod_proposed = map(train, ~ lm(proposed_formula, data = .x)),
+    mod_1 = map(train, ~ lm(md1, data = .x)),
+    mod_2 = map(train, ~ lm(md2, data = .x))
+  )
+```
+
+```{r}
+cv_df = cv_df  |> 
+  mutate(
+    rmse_proposed = map2_dbl(mod_proposed, test,  ~ rmse(model = .x, data = .y)),
+    rmse_1        = map2_dbl(mod_1,        test,  ~ rmse(model = .x, data = .y)),
+    rmse_2        = map2_dbl(mod_2,        test,  ~ rmse(model = .x, data = .y))
+  )
+```
+```{r}
+cv_df  |>  summarise(
+  n_valid_proposed = sum(!is.na(rmse_proposed)),
+  n_valid_1        = sum(!is.na(rmse_1)),
+  n_valid_2        = sum(!is.na(rmse_2))
+) |> 
+  print()
+```
+
+```{r}
+cv_summary = cv_df  |> 
+  summarise(
+    proposed_mean_rmse = mean(rmse_proposed, na.rm = TRUE),
+    proposed_sd_rmse   = sd(rmse_proposed,   na.rm = TRUE),
+    mean_rmse_1        = mean(rmse_1, na.rm = TRUE),
+    sd_rmse_1          = sd(rmse_1, na.rm = TRUE),
+    mean_rmse_2        = mean(rmse_2, na.rm = TRUE),
+    sd_rmse_2          = sd(rmse_2, na.rm = TRUE)
+  )
+
+print(cv_summary)
+```
+
+```{r}
+cv_long = cv_df |> 
+  select(starts_with("rmse_"))  |> 
+  pivot_longer(everything(), names_to = "model", values_to = "rmse") |> 
+  mutate(
+    model = recode(model,
+                   rmse_proposed = "Proposed",
+                   rmse_1        = "Length+Gaweeks (1)",
+                   rmse_2        = "Head*Length*Sex (2)"),
+    model = fct_inorder(model)
+  )
+
+ggplot(cv_long, aes(x = model, y = rmse)) +
+  geom_violin(trim = TRUE) +
+  geom_jitter(width = 0.15, alpha = 0.4) +
+  labs(title = "Monte-Carlo CV: RMSE distributions (50 repeats)",
+       x = "Model",
+       y = "RMSE (grams)") +
+  theme_minimal()
+```
 
